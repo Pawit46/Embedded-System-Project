@@ -1,2 +1,211 @@
 # Embedded-System-Project
 Group7 : Tutor80
+#include <LiquidCrystal_I2C.h>
+#include <Servo.h>
+
+const int trigPin = 9;           // Trig pin of the ultrasonic sensor
+const int echoPin = 10;          // Echo pin of the ultrasonic sensor
+const int redPin = 6;            // Red pin of the RGB LED
+const int greenPin = 5;          // Green pin of the RGB LED
+const int bluePin = 4;           // Blue pin of the RGB LED
+const int buzzerPin = 7;         // Buzzer pin
+const int buttonPin = 3;         // Button pin
+const int ldrPin = A2;           // LDR pin
+const int ledPin = 11;           // LED pin
+
+const int joyXPin = A0;          // Analog pin for joystick X-axis
+const int joyYPin = A1;          // Analog pin for joystick Y-axis
+const int switchPin = 2;         // Digital pin for the mode switch
+
+LiquidCrystal_I2C lcd(0x27, 16, 2); // LCD pins
+
+Servo servoMotor;
+
+// Define the pin for the servo motor
+const int servoPin = 8;          // Servo motor pin
+
+bool manualMode = true;           // Initial mode is manual
+
+volatile long duration;           // Variable to store the duration of sound wave travel
+volatile int distance;            // Variable to store the calculated distance
+volatile int previousDistance = 0; // Variable to store the previous distance
+volatile int speed = 0;           // Variable to store the speed
+
+void setup() {
+  Serial.begin(9600); // Initialize serial communication
+  pinMode(trigPin, OUTPUT);
+  pinMode(echoPin, INPUT);
+  pinMode(redPin, OUTPUT);
+  pinMode(greenPin, OUTPUT);
+  pinMode(bluePin, OUTPUT);
+  pinMode(buzzerPin, OUTPUT);
+  servoMotor.attach(servoPin);
+  pinMode(switchPin, INPUT_PULLUP);
+  pinMode(ldrPin, INPUT);
+  pinMode(ledPin, OUTPUT);
+  
+  lcd.begin(); // Initialize the LCD
+
+  // Attach interrupt to switch pin
+  attachInterrupt(digitalPinToInterrupt(switchPin), switchMode, FALLING);
+}
+
+void loop() {
+  if (manualMode) {
+    // Display "Manual Mode" on LCD
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("Manual Mode");
+    
+    // Read joystick values
+    int joyXValue = analogRead(joyXPin);
+    int joyYValue = analogRead(joyYPin);
+
+    // Manual mode: control servo with joystick
+    int servoAngleX = map(joyXValue, 0, 1023, 0, 180);
+    servoMotor.write(servoAngleX); // Control servo with joystick X-axis
+    
+    // Control LED intensity based on joystick Y-axis
+    int ledIntensity = map(joyYValue, 0, 1023, 0, 255);
+    analogWrite(ledPin, ledIntensity);
+
+  } else {
+    // Automatic mode: perform automatic action
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("Waiting");
+    servoMotor.write(0);
+    mealight();
+    if (digitalRead(buttonPin) == LOW) {
+      crossing(); // Start crossing
+    }
+  }
+}
+
+void crossing() {
+  lcd.setCursor(0, 1);
+  lcd.print("Timer: ");
+  
+  // Start timer
+  int timer = 10; // 10 seconds to cross
+  while (timer > 0) {
+    lcd.setCursor(7, 1);
+    lcd.print("  ");
+    lcd.setCursor(7, 1);
+    lcd.print(timer);
+    mealight();
+    warningSpeed();
+    delay(1000);
+    timer--;
+  }
+  
+  // Change to green light
+  rgbLed(0, 255, 0); // Green color
+  lcd.clear();
+  lcd.print("Walking");
+  servoMotor.write(90);
+  
+  // Start timer to set back to red light
+  lcd.setCursor(0, 1);
+  lcd.print("Timer: ");
+  timer = 8; // 5 seconds before changing back to red
+  while (timer > 0) {
+    mealight();
+    warningSpeed();
+    // Check speed condition
+    if (speed > 10) {
+      servoMotor.write(0);
+      digitalWrite(buzzerPin, HIGH);
+      delay(1000);
+      digitalWrite(buzzerPin, LOW);
+      break;
+    } else {
+      lcd.setCursor(7, 1);
+      lcd.print("        ");
+      servoMotor.write(90);
+      lcd.setCursor(7, 1);
+      lcd.print(timer);
+    }
+    if (timer % 2 == 0) {
+      digitalWrite(buzzerPin, HIGH);
+      delay(100);
+      digitalWrite(buzzerPin, LOW);
+    } else {
+      digitalWrite(buzzerPin, LOW);
+      delay(100);
+    }
+    delay(900);
+    timer--;
+  }
+  
+  // Yellow light for 3 seconds
+  rgbLed(255, 255, 0); // Yellow color
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Stop!");
+  for (int i = 3; i > 0; --i) {
+    mealight();
+    lcd.setCursor(0, 1);
+    lcd.print("Timer: ");
+    lcd.setCursor(7, 1);
+    lcd.print(i);
+    delay(1000);
+  }
+  
+  // Change back to red light
+  rgbLed(255, 0, 0); // Red color
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Waiting to cross");
+  servoMotor.write(0);
+}
+
+void rgbLed(int red, int green, int blue) {
+  analogWrite(redPin, red);
+  analogWrite(greenPin, green);
+  analogWrite(bluePin, blue);
+}
+
+void switchMode() {
+  manualMode = !manualMode; // Toggle the mode
+}
+
+void warningSpeed() {
+    // Measure distance using ultrasonic sensor
+    Serial.print("Distance: ");
+    Serial.print(distance);
+    Serial.println(" cm");
+    Serial.print("Speed: ");
+    Serial.print(speed);
+    Serial.println(" cm/s");
+
+    digitalWrite(trigPin, LOW);
+    delayMicroseconds(2);
+    digitalWrite(trigPin, HIGH);
+    delayMicroseconds(10);
+    digitalWrite(trigPin, LOW);
+  
+    duration = pulseIn(echoPin, HIGH);
+  
+    // Calculate distance
+    distance = duration * 0.034 / 2;
+
+    // Calculate speed
+    if (previousDistance != 0) {
+      speed = abs(distance - previousDistance); // Calculate speed (change in distance)
+    }
+    previousDistance = distance; // Store current distance for the next iteration
+}
+
+void mealight() {
+    int lightLevel = analogRead(ldrPin);
+    Serial.print("Light Level: ");
+    Serial.println(lightLevel);
+    if (lightLevel < 50) { // Adjust the threshold according to your environment
+      digitalWrite(ledPin, HIGH); // Turn on LED if it's dark
+    } if (lightLevel < 250) {
+        analogWrite(ledPin, 255 - lightLevel);
+    } else {
+      digitalWrite(ledPin, LOW); // Turn off LED if it's bright
+    }
+}
