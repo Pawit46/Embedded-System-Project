@@ -1,211 +1,42 @@
 # Embedded-System-Project
 Group7 : Tutor80
-#include <LiquidCrystal_I2C.h>
-#include <Servo.h>
 
-const int trigPin = 9;           // Trig pin of the ultrasonic sensor
-const int echoPin = 10;          // Echo pin of the ultrasonic sensor
-const int redPin = 6;            // Red pin of the RGB LED
-const int greenPin = 5;          // Green pin of the RGB LED
-const int bluePin = 4;           // Blue pin of the RGB LED
-const int buzzerPin = 7;         // Buzzer pin
-const int buttonPin = 3;         // Button pin
-const int ldrPin = A2;           // LDR pin
-const int ledPin = 11;           // LED pin
 
-const int joyXPin = A0;          // Analog pin for joystick X-axis
-const int joyYPin = A1;          // Analog pin for joystick Y-axis
-const int switchPin = 2;         // Digital pin for the mode switch
 
-LiquidCrystal_I2C lcd(0x27, 16, 2); // LCD pins
 
-Servo servoMotor;
+แรงจูงใจ แนวคิด ความสำคัญของโครงงาน
+	
+ 
+ 
+ 
+ เนื่องจากปัจจุบันมีปัญหาจำนวนมากที่เกิดขึ้นในกรุงเทพฯ ผู้อยู่อาศัยจำนวนมากได้ออกมาเรียกร้องให้ปัญหาเหล่านี้ถูกแก้ไขอย่างเร่งด่วน ปัญหาเหล่านี้ เช่น น้ำท่วมขัง, ฝุ่นและมลพิษ, กล้องวงจรปิดและไฟส่องสว่างไม่ทั่วถึงทางสัญจร, ถนนและทางเท้าชำรุด และ ความปลอดภัยบนทางม้าลาย เป็นต้น ซึ่งปัญหาที่ถูกร้องเรียนมาเป็นอันดับต้นๆ คือปัญหาบนทางเท้าและความปลอดภัยบนทางม้าลาย ปัญหานี้มีทั้งการที่มีความไม่ปลอดภัยในการข้ามทางม้าลาย แม้กระทั่งการที่ไฟสาธารณะตามถนนชำรุดหรือมีประสิทธิภาพไม่มากพอในเวลากลางคืนทำให้เกิดความไม่ปลอดภัยต่อคนที่สัญจรในบริเวณดังกล่าว ดังนั้นกลุ่มของพวกเราจึงเห็นความสำคัญของปัญหานี้ ซึ่งปัญหานี้เป็นปัญหาที่มีมานานและอยู่ใกล้ตัวทุกคนแต่ยังไม่สามารถแก้ไขปัญหาได้ จึงมีความสนใจในการพัฒนาระบบฝังตัวที่ใช้แก้ปัญหาดังกล่าว
 
-// Define the pin for the servo motor
-const int servoPin = 8;          // Servo motor pin
 
-bool manualMode = true;           // Initial mode is manual
+การทำงานของระบบ
 
-volatile long duration;           // Variable to store the duration of sound wave travel
-volatile int distance;            // Variable to store the calculated distance
-volatile int previousDistance = 0; // Variable to store the previous distance
-volatile int speed = 0;           // Variable to store the speed
 
-void setup() {
-  Serial.begin(9600); // Initialize serial communication
-  pinMode(trigPin, OUTPUT);
-  pinMode(echoPin, INPUT);
-  pinMode(redPin, OUTPUT);
-  pinMode(greenPin, OUTPUT);
-  pinMode(bluePin, OUTPUT);
-  pinMode(buzzerPin, OUTPUT);
-  servoMotor.attach(servoPin);
-  pinMode(switchPin, INPUT_PULLUP);
-  pinMode(ldrPin, INPUT);
-  pinMode(ledPin, OUTPUT);
-  
-  lcd.begin(); // Initialize the LCD
 
-  // Attach interrupt to switch pin
-  attachInterrupt(digitalPinToInterrupt(switchPin), switchMode, FALLING);
-}
 
-void loop() {
-  if (manualMode) {
-    // Display "Manual Mode" on LCD
-    lcd.clear();
-    lcd.setCursor(0, 0);
-    lcd.print("Manual Mode");
-    
-    // Read joystick values
-    int joyXValue = analogRead(joyXPin);
-    int joyYValue = analogRead(joyYPin);
 
-    // Manual mode: control servo with joystick
-    int servoAngleX = map(joyXValue, 0, 1023, 0, 180);
-    servoMotor.write(servoAngleX); // Control servo with joystick X-axis
-    
-    // Control LED intensity based on joystick Y-axis
-    int ledIntensity = map(joyYValue, 0, 1023, 0, 255);
-    analogWrite(ledPin, ledIntensity);
 
-  } else {
-    // Automatic mode: perform automatic action
-    lcd.clear();
-    lcd.setCursor(0, 0);
-    lcd.print("Waiting");
-    servoMotor.write(0);
-    mealight();
-    if (digitalRead(buttonPin) == LOW) {
-      crossing(); // Start crossing
-    }
-  }
-}
-
-void crossing() {
-  lcd.setCursor(0, 1);
-  lcd.print("Timer: ");
-  
-  // Start timer
-  int timer = 10; // 10 seconds to cross
-  while (timer > 0) {
-    lcd.setCursor(7, 1);
-    lcd.print("  ");
-    lcd.setCursor(7, 1);
-    lcd.print(timer);
-    mealight();
-    warningSpeed();
-    delay(1000);
-    timer--;
-  }
-  
-  // Change to green light
-  rgbLed(0, 255, 0); // Green color
-  lcd.clear();
-  lcd.print("Walking");
-  servoMotor.write(90);
-  
-  // Start timer to set back to red light
-  lcd.setCursor(0, 1);
-  lcd.print("Timer: ");
-  timer = 8; // 5 seconds before changing back to red
-  while (timer > 0) {
-    mealight();
-    warningSpeed();
-    // Check speed condition
-    if (speed > 10) {
-      servoMotor.write(0);
-      digitalWrite(buzzerPin, HIGH);
-      delay(1000);
-      digitalWrite(buzzerPin, LOW);
-      break;
-    } else {
-      lcd.setCursor(7, 1);
-      lcd.print("        ");
-      servoMotor.write(90);
-      lcd.setCursor(7, 1);
-      lcd.print(timer);
-    }
-    if (timer % 2 == 0) {
-      digitalWrite(buzzerPin, HIGH);
-      delay(100);
-      digitalWrite(buzzerPin, LOW);
-    } else {
-      digitalWrite(buzzerPin, LOW);
-      delay(100);
-    }
-    delay(900);
-    timer--;
-  }
-  
-  // Yellow light for 3 seconds
-  rgbLed(255, 255, 0); // Yellow color
-  lcd.clear();
-  lcd.setCursor(0, 0);
-  lcd.print("Stop!");
-  for (int i = 3; i > 0; --i) {
-    mealight();
-    lcd.setCursor(0, 1);
-    lcd.print("Timer: ");
-    lcd.setCursor(7, 1);
-    lcd.print(i);
-    delay(1000);
-  }
-  
-  // Change back to red light
-  rgbLed(255, 0, 0); // Red color
-  lcd.clear();
-  lcd.setCursor(0, 0);
-  lcd.print("Waiting to cross");
-  servoMotor.write(0);
-}
-
-void rgbLed(int red, int green, int blue) {
-  analogWrite(redPin, red);
-  analogWrite(greenPin, green);
-  analogWrite(bluePin, blue);
-}
-
-void switchMode() {
-  manualMode = !manualMode; // Toggle the mode
-}
-
-void warningSpeed() {
-    // Measure distance using ultrasonic sensor
-    Serial.print("Distance: ");
-    Serial.print(distance);
-    Serial.println(" cm");
-    Serial.print("Speed: ");
-    Serial.print(speed);
-    Serial.println(" cm/s");
-
-    digitalWrite(trigPin, LOW);
-    delayMicroseconds(2);
-    digitalWrite(trigPin, HIGH);
-    delayMicroseconds(10);
-    digitalWrite(trigPin, LOW);
-  
-    duration = pulseIn(echoPin, HIGH);
-  
-    // Calculate distance
-    distance = duration * 0.034 / 2;
-
-    // Calculate speed
-    if (previousDistance != 0) {
-      speed = abs(distance - previousDistance); // Calculate speed (change in distance)
-    }
-    previousDistance = distance; // Store current distance for the next iteration
-}
-
-void mealight() {
-    int lightLevel = analogRead(ldrPin);
-    Serial.print("Light Level: ");
-    Serial.println(lightLevel);
-    if (lightLevel < 50) { // Adjust the threshold according to your environment
-      digitalWrite(ledPin, HIGH); // Turn on LED if it's dark
-    } if (lightLevel < 250) {
-        analogWrite(ledPin, 255 - lightLevel);
-    } else {
-      digitalWrite(ledPin, LOW); // Turn off LED if it's bright
-    }
-}
+จากแรงจูงใจในการทำโครงงาน ผู้จัดทำจึงต้องการที่จะออกแบบระบบฝังตัวที่มีส่วนช่วยในการเพิ่มระดับ
+ความปลอดภัยในการข้ามถนนและทางเท้า จึงสร้างระบบฝังตัวส่วนที่ 1 ที่ควบคุมไม้กั้นทางรถยนต์โดยระบบนี้
+สามารถควบคุมได้ 2 โหมดการใช้งาน ได้แก่ โหมดทำด้วยมือและโหมดอัตโนมัติโหมดทำด้วยมือคือโหมดที่เรา
+สามารถควบคุมการเปิด-ปิดของไม้กั้นเองผ่านอุปกรณ์ที่เชื่อมต่ออยู่กับระบบฝังตัว โหมดอัตโนมัติคือโหมดที่ไม้กั้น
+สามารถทำการเปิด-ปิดได้เองโดยการตรวจจับผ่านเซนเซอร์ระยะทางซึ่งตรวจจับความเร็วรถจากการเอาความต่าง
+ระยะทางเทียบกับเวลาและมีเวลานับถอยหลังที่กำหนดอย่างชัดเจน ซึ่งโหมดอัตโนมัติจะถูกใช้งานเมื่อผู้ที่ต้องการ
+ข้ามทางม้าลายกดปุ่ม โดยทั้งสองระบบนี้สามารถทำงานสลับไปมากันได้และทั้งสองโหมดยังมีการแสดงผลถึง
+สถานะการข้ามทางม้าลายและเวลานับถอยหลังเมื่อการทำงานอยู่ในระบบอัตโนมัติ ระบบฝังตัวส่วนที่ 1 นี้จะ
+แก้ปัญหาในส่วนของการข้ามทางม้าลาย
+ระบบฝังตัวส่วนที่ 2 เป็นระบบที่แก้ปัญหาในส่วนของทางเท้าให้มีความปลอดภัยมากขึ้น ซึ่งสามารถใช้
+งานสลับกันไปมาได้ 2 โหมดเช่นกัน โดยในโหมดอัตโนมัติ การควบคุมการเปิด-ปิดไฟตามทางเท้าจะใช้เซนเซอร์วัด
+ความเข้มแสง เมื่อเซนเซอร์ตรวจจับได้ว่ามีความเข้มแสงที่น้อยเกินไปจะควบคุมให้ไฟตามทางเปิด ถ้าความเข้มแสง
+มากเกินไปจะควบคุมให้ไฟตามทางปิด ถ้าความเข้มแสงไม่มากไปไม่น้อยไปเมื่อเทียบกับค่าที่ตั้งไว้จะควบคุมให้ไฟ
+ตามทางเปล่งออกมาสลัวๆ และในโหมดทำด้วยมือ จะสามารถควบคุมการเปิด-ปิดไฟตามทางได้ผ่านการใช้ 
+Joystick ซึ่งจะควบคุมในแนวแกน Y
+ระบบฝังตัวส่วนที่ 1 และส่วนที่ 2 รวมกันจึงเป็นระบบฝังตัวที่สามารถแก้ปัญหาบนทางเท้าและความ
+ปลอดภัยบนทางม้าลาย โดย อินพุต(input) ของระบบฝังตัวรวมนี้ คือ ข้อมูลระยะห่างจาก Ultrasonic Sensor,
+การกดใช้ Tact Switch ของผู้ข้ามทางม้าลาย, ข้อมูลความสว่างจาก LDR และ การกดเพื่อเปลี่ยนโหมดที่ 
+Joystick (Interrupt) และ เอาท์พุต(output) ของระบบฝังตัวรวมนี้ คือ การแสดงสถานะการข้ามถนนบนจอ 
+LCD, ไฟที่เปลี่ยนสีได้จากการใช้งานทั้ง 2 โหมด, ไฟตามทางที่ LED เปล่งออกมา, การหมุนของ Servo Machine 
+และ การส่งเสียงร้องของ Buzzer
